@@ -1,0 +1,130 @@
+---
+title: "STATS 560: HW4"
+author: "Jonathan Day"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+Download the handgun background check data from Canvas to do the following analyses. Focus only on the columns corresponding to the years 2000, 2010, and 2020 (tot2000, tot2010, and tot2020). Each column corresponds to the total number of handgun background checks registered for each of the 48 contiguous United States (in thousands).
+
+```{r}
+data <- read.csv('handgun_bg_checks.csv') %>% select(Abbreviation, tot2000, tot2010, tot2020)
+data %>% print
+```
+
+(1) Plot the empirical CDF (eCDF) of the values for each year all on the same plot. Then, use your resulting eCDFs to compute an estimate of the median for each eCDF (do not use the median function in R).
+
+```{r}
+vals <- seq(floor(min(data$tot2000,data$tot2010,data$tot2020)), 
+            ceiling(max(data$tot2000,data$tot2010,data$tot2020)))
+cdf <- data.frame(vals, `2000`= 0, `2010`= 0, `2020`= 0)
+for (i in seq(1,length(vals))) {
+  cdf[i,1] <- vals[i]
+  cdf[i,2] <- sum(data$tot2000 <= vals[i])/length(data$tot2000)
+  cdf[i,3] <- sum(data$tot2010 <= vals[i])/length(data$tot2010)
+  cdf[i,4] <- sum(data$tot2020 <= vals[i])/length(data$tot2020)
+}
+```
+
+```{r}
+ggplot(data=cdf, aes(x=vals)) + 
+  geom_line(aes(y=`X2000`, color="X2000")) +
+  geom_line(aes(y=`X2010`, color="X2010")) +
+  geom_line(aes(y=`X2020`, color="X2020")) +
+  labs(title="Empirical CDF by year of Number of Background Checks by State",
+       x=NULL,y=NULL) +
+  scale_color_manual(values=c("X2000"="blue", "X2010"="red", "X2020"="green"),
+                      name=NULL,
+                      labels=c("2000", "2010", "2020"))+
+  theme_minimal()
+
+```
+
+```{r}
+paste0("Median of Year 2000: ",cdf %>% 
+         filter(X2000 > 0.48 & X2000 < 0.55) %>% 
+         select(vals,X2000) %>% max)
+paste0("Median of Year 2010: ",cdf %>% 
+         filter(X2010 > 0.48 & X2010 < 0.52) %>% 
+         select(vals,X2000) %>% max)
+paste0("Median of Year 2020: ",cdf %>% 
+         filter(X2020 > 0.48 & X2020 < 0.51) %>% 
+         select(vals,X2000) %>% max)
+```
+
+(2) For each of the years, compute the average of your values. Perform a one-sample Kolmogorov-Smirnov (KS) test of whether the values in each year follow an exponential distribution using your observed mean for the value of the distribution’s mean. Based upon your findings, which of the years have values that you cannot reject having an exponential distribution?
+
+```{r}
+av.00 <- mean(data$tot2000)
+av.10 <- mean(data$tot2010)
+av.20 <- mean(data$tot2020)
+
+paste0("Averages:")
+paste0("Year 2000: ", av.00)
+paste0("Year 2000: ", av.10)
+paste0("Year 2000: ", av.20)
+paste0("-----------------")
+paste0("Kolmogorov-Smirnov Test for Exponential Distribution")
+paste0("P-value for Year 2000: ",round(ks.test(data$tot2000, y="pexp", rate=1/av.00)$p.value,3))
+paste0("P-value for Year 2000: ",round(ks.test(data$tot2010, y="pexp", rate=1/av.10)$p.value,3))
+paste0("P-value for Year 2000: ",round(ks.test(data$tot2020, y="pexp", rate=1/av.20)$p.value,3))
+```
+Based on the above found p-values, none of the years cannot reject having an exponential distribution.
+
+(3) Using the two-sample Kolmogorov-Smirnov (KS) test, determine if there are significant differences in the distributions of values for each pair of years (three total KS tests). State any significant findings you have.
+
+```{r}
+paste0("Kolmogorov-Smirnov Test Across Years")
+paste0("P-value for Years 2000-2010: ",ks.test(data$tot2000, data$tot2010)$p.value)
+paste0("P-value for Years 2010-2020: ",ks.test(data$tot2010, data$tot2020)$p.value)
+paste0("P-value for Years 2000-2020: ",ks.test(data$tot2000, data$tot2020)$p.value)
+```
+The years 2000 and 2010 have no significant difference in distribution while both have significant differences in distribution to the year 2020.
+
+(4) In lecture I showed you the formula and shape for the “tricube” kernel. Using this kernel, compute your own kernel density estimate (KDE) of the values for each year using a bandwidth of 120. Compute the KDE at each value 0, 1, 2, …, 1100. Plot these KDEs together in a single plot.
+
+KDE Formula:
+$ \hat{f}_{h_n}(x) = \frac{1}{nh_n} \sum_{i=1}^n  K(\frac{x-X_i}{h_n}) $
+
+Tricube Kernel:
+$ K(u) = (1-|u|^3)^3; \ u \in (-1,1) $
+
+```{r}
+kde <- function(vec) {
+  n = length(vec) # sample size
+  h = (0.9*sd(vec)) * (n)^(-1/5) # bandwidth
+  shift = ceiling(0.1*(max(vec) - min(vec))) # padding offset
+  res <- seq(floor(min(vec))-shift,ceiling(max(vec))+shift,0.1) # xx's sequence
+  kde <- rep(0,length(res)) # prep final yy's
+  
+  xx <- seq(-1,1,.1) # Tricube kernel support
+  yy <- ((1-abs(xx)^3))^3 # Tricube kernel values
+  
+  for (i in seq(1,length(vec))) {
+    # find index of resultant vector closest to value of vec
+    idx <- which.min(abs(res - vec[i]))
+  }
+  return(kde)
+}
+
+(kde(data$tot2000))
+```
+
+```{r}
+xx <- seq(-1,1,.1)
+yy <- ((1-abs(xx)^3))^3
+ggplot(data=data.frame(xx,yy)) + geom_line(aes(xx,yy))
+```
+
+
+
+(5) For each year, compute the sum of the KDEs from Question (5). What probability is this sum estimating? What should the actual value of this probability be? Given your results, what is an assumption made by KDEs that does not hold with your data?
+
+(6) Now natural log-transform the values for each year. With a bandwidth found through biased cross-validation (BCV), use the density function in R to fit a KDE of the log-transformed values for each year. Plot all three KDEs in a single figure.
+
+(7) For each year, compute the mean and standard deviation of your log-transformed values; consider these values to be the true population means and standard deviations. Now, perform a one-sample Kolmogorov-Smirnov (KS) test of whether the log-transformed values in each year follow a normal distribution. Based upon your findings, which of the years have log-transformed values that you cannot reject having a normal distribution? Does your conclusion support what you see in the figure you created in Question (7)?
